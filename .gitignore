@@ -5,3 +5,4 @@ debug.html
 __pycache__/
 *.pyc
 .venv/
+.tasks/

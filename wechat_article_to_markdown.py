@@ -39,6 +39,21 @@ IMAGE_CONCURRENCY = 5
 # ============================================================
 
 
+def sanitize_path_segment(name: str, *, max_len: int = 80) -> str:
+    """
+    将任意字符串清理成适合作为文件/目录名的片段。
+
+    - 替换常见非法字符为 `_`
+    - 去掉首尾空白
+    - 限制最大长度（避免过长路径）
+    """
+    s = str(name or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r'[/\\?%*:|"<>]', "_", s)
+    return s[: max(1, int(max_len))]
+
+
 def normalize_wechat_url(raw: str) -> str:
     """
     尽可能“宽容”地规范化用户输入的微信文章 URL。
@@ -322,8 +337,14 @@ def build_markdown(meta: dict, body_md: str) -> str:
 # ============================================================
 
 
-async def fetch_article(url: str) -> None:
+async def fetch_article(
+    url: str,
+    *,
+    output_dir: Path | None = None,
+    skip_if_exists: bool = False,
+) -> Path:
     url = normalize_wechat_url(url)
+    base_output_dir = output_dir or OUTPUT_DIR
     print(f"🔄 正在抓取: {url}")
 
     # 使用 Camoufox 反检测浏览器获取完整 HTML
@@ -347,10 +368,10 @@ async def fetch_article(url: str) -> None:
     meta = extract_metadata(soup, html)
     if not meta["title"]:
         print("❌ 未能提取到文章标题，可能触发了验证码")
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        (OUTPUT_DIR / "debug.html").write_text(html, encoding="utf-8")
-        print("已保存原始 HTML 到 output/debug.html")
-        sys.exit(1)
+        base_output_dir.mkdir(parents=True, exist_ok=True)
+        (base_output_dir / "debug.html").write_text(html, encoding="utf-8")
+        print(f"已保存原始 HTML 到 {base_output_dir / 'debug.html'}")
+        raise RuntimeError("未能提取到文章标题（可能触发验证码）")
 
     meta["source_url"] = url
     print(f"📄 标题: {meta['title']}")
@@ -360,15 +381,18 @@ async def fetch_article(url: str) -> None:
     # 处理正文
     content_html, code_blocks, img_urls = process_content(soup)
     if not content_html:
-        print("❌ 未能提取到正文内容")
-        sys.exit(1)
+        raise RuntimeError("未能提取到正文内容")
 
     # 转 Markdown
     md = convert_to_markdown(content_html, code_blocks)
 
     # 下载图片
-    safe_title = re.sub(r'[/\\?%*:|"<>]', "_", meta["title"])[:80]
-    article_dir = OUTPUT_DIR / safe_title
+    safe_title = sanitize_path_segment(meta["title"], max_len=80) or "untitled"
+    article_dir = base_output_dir / safe_title
+    if skip_if_exists and article_dir.exists():
+        print(f"⏭️  目标路径已存在，跳过下载: {article_dir}")
+        return article_dir
+
     img_dir = article_dir / "images"
     img_dir.mkdir(parents=True, exist_ok=True)
 
@@ -382,6 +406,7 @@ async def fetch_article(url: str) -> None:
 
     print(f"✅ 已保存: {md_path}")
     print(f"📊 Markdown 约 {len(md)} 字符")
+    return article_dir
 
 
 def main():
