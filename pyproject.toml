@@ -31,9 +31,10 @@ Issues = "https://github.com/jackwener/wechat-article-to-markdown/issues"
 
 [project.scripts]
 wechat-article-to-markdown = "wechat_article_to_markdown:main"
+wechat-homepage-to-links = "wechat_homepage_to_links:main"
 
 [tool.setuptools]
-py-modules = ["wechat_article_to_markdown", "main"]
+py-modules = ["wechat_article_to_markdown", "wechat_homepage_to_links", "main"]
 
 [tool.pytest.ini_options]
 markers = [

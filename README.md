@@ -43,6 +43,12 @@ uv run wechat-article-to-markdown "https://mp.weixin.qq.com/s/xxxxxxxx"
 uv run main.py "https://mp.weixin.qq.com/s/xxxxxxxx"
 ```
 
+Extract links from an Official Account homepage (JSON includes `article_links` and `all_links`):
+
+```bash
+wechat-homepage-to-links "https://mp.weixin.qq.com/mp/homepage?__biz=xxxx&hid=xx&sn=xx" --json
+```
+
 Output structure:
 
 ```text
