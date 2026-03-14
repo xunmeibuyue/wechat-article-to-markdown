@@ -47,9 +47,29 @@ Extract links from an Official Account homepage (JSON includes `article_links` a
 
 ```bash
 wechat-homepage-to-links "https://mp.weixin.qq.com/mp/homepage?__biz=xxxx&hid=xx&sn=xx" --json
+
+# Or run in repo without installing the CLI
+python wechat_homepage_to_links.py "https://mp.weixin.qq.com/mp/homepage?__biz=xxxx&hid=xx&sn=xx" --json
 ```
 
-Output structure:
+Batch crawl multiple homepages into `output/<homepage-title>/<article-title>/`:
+
+1) Edit `HOMEPAGE_URLS` in `wechat_batch_crawl.py`
+2) Run:
+
+```bash
+python -u wechat_batch_crawl.py
+```
+
+Optional flags (recommended for stability):
+
+```bash
+python -u wechat_batch_crawl.py --max-items 500 --per-article-sleep 1.0 --retries 2 --retry-sleep 8
+```
+
+The batch script will skip downloading when the target directory already exists, so it is safe to rerun.
+
+Output structure (single article):
 
 ```text
 output/
@@ -59,6 +79,23 @@ output/
         ├── img_001.png
         ├── img_002.png
         └── ...
+```
+
+Output structure (batch crawl):
+
+```text
+output/
+└── <homepage-title>/
+    ├── article_links.json
+    ├── download_state.json
+    ├── failed_urls.json
+    ├── debug.html
+    └── <article-title>/
+        ├── <article-title>.md
+        └── images/
+            ├── img_001.png
+            ├── img_002.png
+            └── ...
 ```
 
 
@@ -145,6 +182,32 @@ pipx install wechat-article-to-markdown
 ```bash
 wechat-article-to-markdown "https://mp.weixin.qq.com/s/xxxxxxxx"
 ```
+
+提取公众号合集的推文链接（JSON 输出包含 `article_links` 和 `all_links`）：
+
+```bash
+wechat-homepage-to-links "https://mp.weixin.qq.com/mp/homepage?__biz=xxxx&hid=xx&sn=xx" --json
+
+# 或者在仓库内直接运行脚本（无需安装 CLI）
+python wechat_homepage_to_links.py "https://mp.weixin.qq.com/mp/homepage?__biz=xxxx&hid=xx&sn=xx" --json
+```
+
+批量下载多个合集下的全部推文（输出到 `output/<合集标题>/<推文标题>/`）：
+
+1) 编辑 `wechat_batch_crawl.py` 里的 `HOMEPAGE_URLS`（填入要抓取的合集列表）
+2) 运行：
+
+```bash
+python -u wechat_batch_crawl.py
+```
+
+可选参数（建议保守一些，降低风控/超时概率）：
+
+```bash
+python -u wechat_batch_crawl.py --max-items 500 --per-article-sleep 1.0 --retries 2 --retry-sleep 8
+```
+
+脚本会在每篇推文下载前检查目标目录是否已存在，存在则跳过，因此可重复运行做增量更新。
 
 ## 作为 AI Agent Skill 使用
 
