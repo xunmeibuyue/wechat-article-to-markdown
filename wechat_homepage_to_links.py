@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import html
 import json
 import random
+import re
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -11,8 +13,6 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 from camoufox.async_api import AsyncCamoufox
-
-from wechat_article_to_markdown import normalize_wechat_url
 
 
 OUTPUT_DIR = Path.cwd() / "output"
@@ -69,6 +69,55 @@ def _dedupe_keep_order(items: Iterable[str]) -> list[str]:
         seen.add(item)
         out.append(item)
     return out
+
+
+def normalize_wechat_url(raw: str) -> str:
+    """
+    尽可能“宽容”地规范化用户输入的 mp.weixin.qq.com URL。
+
+    典型问题：
+    - 终端/输入法在粘贴 URL 时插入反斜杠转义（如 `\\&`、`\\?`），导致参数被污染
+    - 从网页复制包含 HTML 实体（如 `&amp;`）
+    - 有些链接以 http 开头，但 mp.weixin.qq.com 实际稳定使用 https
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return s
+
+    # 去掉常见包裹（有些场景会把引号也一起复制进来）
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        s = s[1:-1].strip()
+    if s.startswith("<") and s.endswith(">"):
+        s = s[1:-1].strip()
+
+    # 反斜杠转义清理：
+    # - zsh 的 url-quote-magic / 终端“安全粘贴”有时会把 `&` 等符号转义成 `\\&`
+    # - JSON/字符串转义也可能出现 `\\/`、`https\\://` 这类形式
+    s = re.sub(r"\\+([:/&?=#%])", r"\1", s)
+
+    # HTML 实体解码（`&amp;` -> `&`）
+    s = html.unescape(s)
+
+    # 允许省略 scheme 的复制结果
+    if s.startswith("mp.weixin.qq.com/") or s.startswith("//mp.weixin.qq.com/"):
+        s = "https://" + s.lstrip("/")
+
+    parsed = urlparse(s)
+    if parsed.scheme in ("http", "https") and (parsed.netloc or parsed.hostname):
+        host = (parsed.hostname or "").lower()
+        if host == "mp.weixin.qq.com":
+            s = urlunparse(
+                (
+                    "https",
+                    "mp.weixin.qq.com",
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment,
+                )
+            )
+
+    return s
 
 
 def _normalize_link(url: str) -> str:
