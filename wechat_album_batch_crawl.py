@@ -65,6 +65,7 @@ async def _download_album(
     per_article_sleep: float,
     retries: int,
     retry_sleep: float,
+    save_html: bool = True,
 ) -> None:
     album_url = wechat_album_to_links.normalize_wechat_url(album_url)
     print("\n" + "=" * 80)
@@ -121,7 +122,12 @@ async def _download_album(
         max_attempts = max(1, retries + 1)
         for attempt in range(1, max_attempts + 1):
             try:
-                article_dir = await wechat_article_to_markdown.fetch_article(
+                fetch_fn = (
+                    wechat_article_to_markdown.fetch_article_html
+                    if save_html
+                    else wechat_article_to_markdown.fetch_article
+                )
+                article_dir = await fetch_fn(
                     article_url,
                     output_dir=album_dir,
                     skip_if_exists=True,
@@ -185,6 +191,11 @@ async def main() -> None:
         default=8.0,
         help="失败重试等待基数（秒，实际会乘以 attempt 并加少量随机抖动）",
     )
+    parser.add_argument(
+        "--markdown",
+        action="store_true",
+        help="保存为 Markdown 格式（默认保存为 HTML）",
+    )
     args = parser.parse_args()
 
     urls = args.urls if args.urls else ALBUM_URLS
@@ -203,6 +214,7 @@ async def main() -> None:
                 per_article_sleep=max(0.0, args.per_article_sleep),
                 retries=max(0, args.retries),
                 retry_sleep=max(0.0, args.retry_sleep),
+                save_html=not args.markdown,
             )
         except Exception as e:
             print(f"合集处理失败: {album_url}\n原因: {e}", file=sys.stderr)

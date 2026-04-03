@@ -337,6 +337,95 @@ def build_markdown(meta: dict, body_md: str) -> str:
 # ============================================================
 
 
+async def fetch_article_html(
+    url: str,
+    *,
+    output_dir: Path | None = None,
+    skip_if_exists: bool = False,
+) -> Path:
+    """抓取微信文章并保存为 HTML 文件（下载图片到本地并替换链接）。"""
+    url = normalize_wechat_url(url)
+    base_output_dir = output_dir or OUTPUT_DIR
+    print(f"🔄 正在抓取: {url}")
+
+    print("🦊 启动 Camoufox 浏览器...")
+    async with AsyncCamoufox(headless=True) as browser:
+        page = await browser.new_page()
+        await page.goto(url, wait_until="domcontentloaded")
+        try:
+            await page.wait_for_selector("#js_content", timeout=10000)
+        except Exception:
+            pass
+        await asyncio.sleep(2)
+        page_html = await page.content()
+
+    soup = BeautifulSoup(page_html, "html.parser")
+    meta = extract_metadata(soup, page_html)
+    if not meta["title"]:
+        base_output_dir.mkdir(parents=True, exist_ok=True)
+        (base_output_dir / "debug.html").write_text(page_html, encoding="utf-8")
+        raise RuntimeError("未能提取到文章标题（可能触发验证码）")
+
+    print(f"📄 标题: {meta['title']}")
+
+    safe_title = sanitize_path_segment(meta["title"], max_len=80) or "untitled"
+    article_dir = base_output_dir / safe_title
+    if skip_if_exists and article_dir.exists():
+        print(f"⏭️  目标路径已存在，跳过: {article_dir}")
+        return article_dir
+
+    # 修复微信懒加载图片: data-src -> src
+    content_el = soup.select_one("#js_content")
+    if content_el:
+        for img in content_el.find_all("img"):
+            data_src = img.get("data-src")
+            if data_src:
+                img["src"] = data_src
+
+    # 收集图片 URL
+    img_urls: list[str] = []
+    seen: set[str] = set()
+    if content_el:
+        for img in content_el.find_all("img", src=True):
+            src = img["src"]
+            if src not in seen:
+                seen.add(src)
+                img_urls.append(src)
+
+    # 下载图片
+    img_dir = article_dir / "images"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    url_map = await download_all_images(img_urls, img_dir)
+
+    # 替换 HTML 中的远程图片链接为本地路径
+    if content_el:
+        for img in content_el.find_all("img", src=True):
+            src = img["src"]
+            local = url_map.get(src)
+            if local:
+                img["src"] = local
+
+    # 注入宽度限制样式，模拟微信网页端阅读体验
+    style_tag = soup.new_tag("style")
+    style_tag.string = (
+        "body { max-width: 900px; margin: 0 auto; padding: 20px; }"
+        " img { max-width: 100%; height: auto; }"
+    )
+    if soup.head:
+        soup.head.append(style_tag)
+    else:
+        head = soup.new_tag("head")
+        head.append(style_tag)
+        if soup.html:
+            soup.html.insert(0, head)
+
+    html_path = article_dir / f"{safe_title}.html"
+    html_path.write_text(str(soup), encoding="utf-8")
+
+    print(f"✅ 已保存: {html_path}")
+    return article_dir
+
+
 async def fetch_article(
     url: str,
     *,

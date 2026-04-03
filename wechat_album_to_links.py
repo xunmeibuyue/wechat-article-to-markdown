@@ -4,10 +4,9 @@ import argparse
 import asyncio
 import json
 import random
-import re
 import sys
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import urlencode, urlparse, urlunparse
 
 from camoufox.async_api import AsyncCamoufox
 
